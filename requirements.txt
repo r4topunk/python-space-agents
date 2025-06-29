@@ -1,0 +1,32 @@
+# Core dependencies for the space agents system
+langchain>=0.3.0
+langchain-openai>=0.2.0
+langchain-community>=0.3.0
+langchain-core>=0.3.0
+langgraph>=0.2.0
+langchain-tavily>=0.1.0
+
+# Async support
+aiohttp>=3.9.0
+
+# Data validation and models
+pydantic>=2.0.0
+
+# Console output and formatting
+rich>=13.0.0
+
+# Environment configuration
+python-dotenv>=1.0.0
+
+# Logging
+structlog>=24.0.0
+
+# Development dependencies
+pytest>=8.0.0
+pytest-asyncio>=0.24.0
+black>=24.0.0
+isort>=5.13.0
+mypy>=1.8.0
+
+# Optional: Enhanced REPL
+ipython>=8.0.0
