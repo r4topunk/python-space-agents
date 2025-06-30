@@ -5,10 +5,10 @@ Researcher agent implementation.
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
-from langchain_tavily import TavilySearch
 from langgraph.prebuilt import create_react_agent
 
-from tools.validation_tools import validate_research
+# from tools.validation_tools import validate_research
+# from tools.image_tools import imageResearcher
 
 
 # Researcher prompt
@@ -62,12 +62,18 @@ def create_researcher_agent(llm: ChatOpenAI):
         Researcher agent instance
     """
     # Initialize tools
-    tavily_search = TavilySearch(max_results=5)
+    # image_researcher = tool(imageResearcher)
+    # validate_research_tool = tool(validate_research)
+    # rss_researcher = tool(rssResearcher)  # Ensure rssResearcher is defined
+    # social_network_researcher = tool(socialNetworkResearcher)  # Ensure socialNetworkResearcher is defined
     
     # Create the agent with tools
     return create_react_agent(
         llm,
-        tools=[tavily_search, validate_research],
+        tools=[
+            # image_researcher, validate_research_tool, rss_researcher, social_network_researcher
+            ],
         name="researcher",
-        prompt=SystemMessage(content=RESEARCHER_PROMPT),
+        prompt=SystemMessage(content=RESEARCHER_PROMPT),  # Keep this line
+        # prompt=SystemMessage(content=RESEARCHER_PROMPT),  # Remove this line
     )

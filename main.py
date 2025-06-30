@@ -1,29 +1,19 @@
-"""
-Main execution script for the Python Space Agents system.
-"""
-
 import asyncio
+import json
 import os
-import sys
-from typing import List, Dict, Any, cast
-from langchain_core.messages import AnyMessage
+from aiohttp import web
+from typing import List, Dict, Any, Set, cast
 
-# Try to load dotenv, but don't fail if not available
+# Optional: load env vars
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    print("⚠️  python-dotenv not available, using environment variables directly")
-    # Try to load .env manually if it exists
-    if os.path.exists('.env'):
-        with open('.env', 'r') as f:
-            for line in f:
-                if '=' in line and not line.strip().startswith('#'):
-                    key, value = line.strip().split('=', 1)
-                    os.environ[key] = value
+    pass
 
+# Try to import dependencies
 try:
-    from langchain_core.messages import HumanMessage
+    from langchain_core.messages import HumanMessage, AnyMessage
     from agents.supervisor import create_supervisor_workflow
     from utils.pretty_print import (
         pretty_print_message,
@@ -34,84 +24,91 @@ try:
     DEPENDENCIES_AVAILABLE = True
 except ImportError as e:
     print(f"❌ Import error: {e}")
-    print("💡 Try running: ./venv/bin/pip install -r requirements.txt")
-    print("💡 Or use: python run.py for demo mode")
     DEPENDENCIES_AVAILABLE = False
 
+connected_clients: Set[web.WebSocketResponse] = set()
 
 async def create_space(user_request: str) -> List[Dict[str, Any]]:
-    """
-    Create a space configuration based on user request.
-    
-    Args:
-        user_request: Natural language description of the space to create
-        
-    Returns:
-        List of messages from the workflow execution
-    """
     if not DEPENDENCIES_AVAILABLE:
-        raise ImportError("Required dependencies not available. Please install them first.")
+        raise ImportError("Missing dependencies.")
     
     try:
-        pretty_print_step("Initializing", "Setting up the supervisor workflow...")
-        
-        # Create the supervisor workflow
         workflow = create_supervisor_workflow()
-        
-        pretty_print_step("Processing", f"Creating space for: {user_request}")
-        
-        # Execute the workflow
         result = []
+
         async for step in workflow.astream(
-            {"messages": cast(List[AnyMessage], [HumanMessage(content=user_request)])},
+            {"messages": cast(List[HumanMessage], [HumanMessage(content=user_request)])},
             stream_mode="values",
             config={"recursion_limit": 50}
         ):
             if "messages" in step and step["messages"]:
                 last_message = step["messages"][-1]
                 pretty_print_message(last_message)
-                print("─" * 50)
                 result.append(last_message)
-        
-        pretty_print_success("Space creation completed successfully!")
         return result
-        
     except Exception as error:
-        pretty_print_error(f"Error creating space: {str(error)}")
+        pretty_print_error(f"Error: {str(error)}")
         raise error
 
+async def websocket_handler(request):
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
 
-def main():
-    """Main entry point for the application."""
-    if not DEPENDENCIES_AVAILABLE:
-        print("❌ Required dependencies not available.")
-        print("🔧 Please run: ./venv/bin/pip install -r requirements.txt")
-        print("💡 Or use: python run.py for demo mode")
-        return
-    # Check for required environment variables
-    required_vars = ["OPENAI_API_KEY"]
-    missing_vars = [var for var in required_vars if not os.getenv(var)]
-    
-    if missing_vars:
-        pretty_print_error(f"Missing required environment variables: {', '.join(missing_vars)}")
-        pretty_print_step("Setup", "Please set the following environment variables:")
-        for var in missing_vars:
-            print(f"  export {var}='your_key_here'")
-        return
-    
-    # Example usage
-    example_request = (
-        "Create a space for a community of dog lovers who are active on Farcaster "
-        "and interested in dog training, sharing photos of their pets, and connecting "
-        "with other dog enthusiasts."
-    )
-    
+    connected_clients.add(ws)
+    print("🟢 Client connected")
+
     try:
-        result = asyncio.run(create_space(example_request))
-        pretty_print_step("Completed", f"Generated {len(result)} workflow steps")
-    except Exception as e:
-        pretty_print_error(f"Application error: {str(e)}")
+        async for msg in ws:
+            if msg.type == web.WSMsgType.TEXT:
+                data = json.loads(msg.data)
+                user_input = data.get("message", "")
+                try:
+                    results = await create_space(user_input)
+                    await ws.send_json({
+                        "status": "ok",
+                        "steps": [msg.content for msg in results]
+                    })
+                except Exception as e:
+                    await ws.send_json({"status": "error", "error": str(e)})
+            elif msg.type == web.WSMsgType.ERROR:
+                print(f"WebSocket error: {ws.exception()}")
+    finally:
+        connected_clients.remove(ws)
+        print("🔴 Client disconnected")
 
+    return ws
+
+async def handle_status(request):
+    return web.Response(text="✅ Agent is up and running!")
+
+async def start_combined_server():
+    app = web.Application()
+ 
+    # Health check now at /status
+    app.router.add_get("/status", handle_status)
+
+    # WebSocket now at /
+    app.router.add_get("/", websocket_handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+
+    site = web.TCPSite(runner, "0.0.0.0", 10000)
+    await site.start()
+
+    print("🚀 Server (HTTP + WS) running on http://localhost:10000")
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(start_combined_server())
+    except KeyboardInterrupt:
+        print("🛑 Server shutdown")
+
+# Simulated WebSocket message to create a space
+async def send_create_space_message(user_request: str):
+    message = {
+        "message": user_request
+    }
+    # Simulate sending the message to the WebSocket handler
+    # This is a placeholder for actual WebSocket communication
+    print(f"Sending message to create space: {message}")
