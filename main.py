@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 from aiohttp import web
-from typing import List, Dict, Any, Set, cast
+from typing import Set, Dict, Any
 
 # Load environment variables if available
 try:
@@ -26,13 +26,11 @@ except ImportError as e:
 
 connected_clients: Set[web.WebSocketResponse] = set()
 
-async def create_space(user_request: str) -> List[Dict[str, Any]]:
+async def create_space(user_request: str, ws: web.WebSocketResponse):
     if not DEPENDENCIES_AVAILABLE:
         raise ImportError("Dependencies not available.")
 
     workflow = create_supervisor_workflow()
-    result = []
-
     initial_state = {
         "input": user_request,
         "messages": [HumanMessage(content=user_request)]
@@ -44,15 +42,24 @@ async def create_space(user_request: str) -> List[Dict[str, Any]]:
             stream_mode="values",
             config={"recursion_limit": 50}
         ):
-            if "messages" in step and step["messages"]:
+            if isinstance(step, dict) and step.get("type") == "LOG":
+                await ws.send_json(step)
+                continue
+
+            if "messages" in step and isinstance(step["messages"], list):
                 last = step["messages"][-1]
                 pretty_print_message(last)
-                result.append({"type": last.type, "content": last.content})
-                await asyncio.sleep(1.1)  # 💤 Delay after each message (tune as needed)
-        return result
+
+                content = getattr(last, "content", None) or last.get("content") if isinstance(last, dict) else None
+                if content:
+                    await ws.send_json({
+                        "type": "message",
+                        "content": content
+                    })
+
     except Exception as e:
         pretty_print_error(f"Workflow error: {str(e)}")
-        raise
+        await ws.send_json({"status": "error", "error": str(e)})
 
 async def websocket_handler(request):
     ws = web.WebSocketResponse()
@@ -75,13 +82,7 @@ async def websocket_handler(request):
                         })
                         continue
 
-                    results = await create_space(user_input)
-                    await ws.send_json({
-                        "name": "Space Builder",
-                        "type": "Reply",
-                        # "message": [r.content for r in results]
-                        "message": [r["content"] for r in results if "content" in r]
-                    })
+                    await create_space(user_input, ws)
 
                 except Exception as e:
                     await ws.send_json({"status": "error", "error": str(e)})

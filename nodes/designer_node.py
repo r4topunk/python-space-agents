@@ -1,33 +1,53 @@
-from typing import List, Dict, Any
-import random
+# nodes/designer_node.py
 
-def layout_fidgets(fidgets: List[Dict[str, Any]], grid_width: int = 12, grid_height: int = 8) -> List[Dict[str, Any]]:
-    """
-    Assigns position (x, y) and dimensions (w, h) to each fidget in the grid.
-    Ensures no overlap by using simple greedy placement.
-    """
-    used_positions = set()
-    placed = []
+import asyncio
+from typing import AsyncGenerator, Dict, Any
+from langchain_core.runnables import Runnable
 
-    for f in fidgets:
-        for _ in range(100):  # Try 100 random positions max
-            w, h = random.choice([(3, 3), (4, 2), (2, 2), (6, 4)])
-            x = random.randint(0, grid_width - w)
-            y = random.randint(0, grid_height - h)
-            coords = {(x + dx, y + dy) for dx in range(w) for dy in range(h)}
+async def designer_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
+    plan = state.get("plan", {})
+    prompt = state.get("input", "")
 
-            if not coords & used_positions:
-                used_positions |= coords
-                placed.append({**f, "x": x, "y": y, "w": w, "h": h})
-                break
-        else:
-            # Failed to place it
-            print(f"⚠️ Could not place fidget: {f['type']}")
+    yield {
+        "type": "LOG",
+        "node": "designer",
+        "status": "start",
+        "content": f"🎨 Designer starting for: {prompt}"
+    }
 
-    return placed
+    await asyncio.sleep(0.5)
 
-def run_designer_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    fidgets = state["fidgets"] if "fidgets" in state else []
-    grid_size = state["grid"] if "grid" in state else {"w": 12, "h": 8}
-    designed = layout_fidgets(fidgets, grid_size["w"], grid_size["h"])
-    return {**state, "designed_fidgets": designed}
+    fidgets = plan.get("fidgets", [])
+    grid = plan.get("grid", "12x10")
+
+    # Assign positions just for illustration
+    positions = []
+    for i, f in enumerate(fidgets):
+        positions.append({
+            "type": f,
+            "x": (i % 4) * 3,
+            "y": (i // 4) * 3,
+            "w": 3,
+            "h": 3
+        })
+
+    message = {
+        "type": "message",
+        "content": f"Designed layout with {len(positions)} fidgets in grid {grid}"
+    }
+
+    yield {
+        "type": "LOG",
+        "node": "designer",
+        "status": "end",
+        "content": f"✅ Designer finished for: {prompt}"
+    }
+
+    yield {
+        **state,
+        "messages": state.get("messages", []) + [message],
+        "designed_fidgets": positions,
+        "grid": grid
+    }
+
+run_designer_node: Runnable = designer_logic
