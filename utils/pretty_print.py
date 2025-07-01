@@ -136,3 +136,21 @@ def pretty_print_success(message: str) -> None:
         expand=False
     )
     console.print(panel)
+
+
+def pretty_print_message(message):
+    content = getattr(message, "content", None) or message.get("content", "")
+    
+    # Detect stage by keywords in message content
+    if "Found resources" in content:
+        header = "🔍 [Researcher]"
+    elif "Planned layout" in content:
+        header = "🧠 [Planner]"
+    elif "Designed layout" in content:
+        header = "🎨 [Designer]"
+    elif "Final layout" in content:
+        header = "🛠️ [Builder]"
+    else:
+        header = "💬 [Message]"
+
+    print(f"\n{header}\n{content}\n")

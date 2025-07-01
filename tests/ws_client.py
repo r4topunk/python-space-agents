@@ -2,6 +2,8 @@ import asyncio
 import websockets
 import json
 
+DEFAULT_MESSAGE = "this is a test"
+
 async def handle_messages(ws):
     try:
         async for reply in ws:
@@ -29,29 +31,38 @@ async def handle_messages(ws):
 
 async def send_commands(ws):
     while True:
-        # Run input in a thread to avoid blocking event loop
-        user_input = await asyncio.to_thread(input, "📤 Enter command (/ping, /message <text>, /exit): ")
-        user_input = user_input.strip()
+        print("\n🔘 Commands: [P]ing | [M]essage | [C]ustom | [Q]uit")
+        key = await asyncio.to_thread(input, "🎮 Choose option: ")
+        key = key.strip().lower()
 
-        if user_input == "/exit":
+        if key == "q":
             print("👋 Exiting.")
             await ws.close()
             break
-        elif user_input == "/ping":
+        elif key == "p":
             await ws.send(json.dumps({"message": "ping"}))
-        elif user_input.startswith("/message "):
-            content = user_input[len("/message "):]
-            await ws.send(json.dumps({"message": content}))
+        elif key == "m":
+            await ws.send(json.dumps({"message": DEFAULT_MESSAGE}))
+        elif key == "c":
+            custom = await asyncio.to_thread(input, "📝 Enter your message: ")
+            await ws.send(json.dumps({"message": custom}))
         else:
-            print("❌ Unknown command. Use /ping or /message <text>")
+            print("❌ Unknown key. Use P, M, C, or Q.")
 
-async def main():
-    uri = "ws://localhost:10000"
-    async with websockets.connect(uri) as ws:
-        print("🟢 Connected to server.")
-        await asyncio.gather(
-            handle_messages(ws),
-            send_commands(ws)
-        )
+async def connect_with_retry(uri):
+    while True:
+        try:
+            async with websockets.connect(uri) as ws:
+                print("🟢 Connected to server.")
+                await asyncio.gather(
+                    handle_messages(ws),
+                    send_commands(ws)
+                )
+        except (websockets.ConnectionClosedError, OSError) as e:
+            print(f"🔁 Disconnected. Retrying in 3s... ({e})")
+            await asyncio.sleep(3)
+        except KeyboardInterrupt:
+            print("👋 Exiting by user.")
+            break
 
-asyncio.run(main())
+asyncio.run(connect_with_retry("ws://localhost:10000"))

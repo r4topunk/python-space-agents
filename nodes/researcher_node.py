@@ -15,7 +15,7 @@ async def researcher_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, An
 
     # Simulate the LLM / image / link / rss tool work
     # In real case, call your imageResearcher or multi-tool logic here
-    await asyncio.sleep(0.5)  # simulate delay
+    await asyncio.sleep(1.5)  # simulate delay
 
     # You can modify this with real LLM logic and output
     new_message = {
