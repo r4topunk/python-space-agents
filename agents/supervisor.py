@@ -2,6 +2,7 @@
 Supervisor agent implementation using LangGraph.
 """
 
+import asyncio
 from typing import List, Literal, Set
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_openai import ChatOpenAI
@@ -40,6 +41,10 @@ SUPERVISOR_PROMPT = """You are the supervisor of a space creation team for the B
 def get_next_node(last_message: BaseMessage, current_node: str) -> str:
     """Determine the next node based on the last message content."""
     # Log the last message to WebSocket clients
+    from websocket import create_connection, WebSocket  # Import WebSocket for usage
+
+    # Initialize the websocket connection
+    websocket = create_connection("ws://your_websocket_url")  # Replace with actual URL
     log_to_websocket(last_message['content'], websocket)
     content = str(last_message.content).lower()
     
@@ -55,7 +60,7 @@ def get_next_node(last_message: BaseMessage, current_node: str) -> str:
     else:
         return END
 
-def research_node(state: MessagesState) -> Command[Literal["designer", END]]:
+async def research_node(state: MessagesState, websocket: web.WebSocketResponse) -> Command[Literal["designer", END]]:
     """Research node that gathers information about the community/topic."""
     # Create researcher agent
     llm = ChatOpenAI(model="gpt-4o", temperature=0.1, max_tokens=4000)
@@ -63,7 +68,7 @@ def research_node(state: MessagesState) -> Command[Literal["designer", END]]:
     
     # Execute research
     result = research_agent.invoke(state)
-    await log_to_clients(f"Research result: {result}")  # Log research result
+    await send_log_to_clients(f"Research result: {result}", websocket)  # Log research result
     goto = get_next_node(result["messages"][-1], "researcher")
     
     # Format the last message as human message for next agent
@@ -77,15 +82,16 @@ def research_node(state: MessagesState) -> Command[Literal["designer", END]]:
         goto=goto,
     )
 
-def design_node(state: MessagesState) -> Command[Literal["builder", END]]:
+def design_node(state: MessagesState, websocket: web.WebSocketResponse) -> Command[Literal["builder", "END"]]:
     """Design node that creates the layout plan."""
     # Create designer agent
     llm = ChatOpenAI(model="gpt-4o", temperature=0.1, max_tokens=4000)
     design_agent = create_designer_agent(llm)
     
+async def execute_design(state, design_agent):  # Pass design_agent as an argument
     # Execute design
     result = design_agent.invoke(state)
-    await log_to_clients(f"Design result: {result}")  # Log design result
+    await send_log_to_clients(f"Design result: {result}", websocket)  # Log design result
     goto = get_next_node(result["messages"][-1], "designer")
     
     # Format the last message as human message for next agent

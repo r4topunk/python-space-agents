@@ -29,4 +29,5 @@ isort>=5.13.0
 mypy>=1.8.0
 
 # Optional: Enhanced REPL
+websocket-client>=1.0.0
 ipython>=8.0.0
