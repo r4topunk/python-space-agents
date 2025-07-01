@@ -2,22 +2,21 @@
 Supervisor agent implementation using LangGraph.
 """
 
-from typing import List, Literal
+from typing import List, Literal, Set
 from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.types import Command
 
 from agents.researcher import create_researcher_agent
-from agents.designer import create_designer_agent  
+from agents.designer import create_designer_agent
 from agents.builder import create_builder_agent
-
 
 # Supervisor prompt
 SUPERVISOR_PROMPT = """You are the supervisor of a space creation team for the Blank Space platform with three specialists:
 
 1. **RESEARCHER**: Gathers information and provides structured research data
-2. **DESIGNER**: Creates layout plans with optimal grid coverage and fidget positioning  
+2. **DESIGNER**: Creates layout plans with optimal grid coverage and fidget positioning
 3. **BUILDER**: Generates final JSON configuration and validates design implementation
 
 ## ENHANCED WORKFLOW
@@ -36,12 +35,12 @@ SUPERVISOR_PROMPT = """You are the supervisor of a space creation team for the B
 - Ensure designs fill the grid effectively (no large empty spaces)
 - Verify final output matches design specifications exactly
 - CRITICAL: The final response must contain the complete JSON configuration
-
-Delegate tasks strategically and ensure the BUILDER provides the complete JSON configuration before finishing."""
-
+"""
 
 def get_next_node(last_message: BaseMessage, current_node: str) -> str:
     """Determine the next node based on the last message content."""
+    # Log the last message to WebSocket clients
+    log_to_websocket(last_message['content'], websocket)
     content = str(last_message.content).lower()
     
     # Check for completion indicators
@@ -56,7 +55,6 @@ def get_next_node(last_message: BaseMessage, current_node: str) -> str:
     else:
         return END
 
-
 def research_node(state: MessagesState) -> Command[Literal["designer", END]]:
     """Research node that gathers information about the community/topic."""
     # Create researcher agent
@@ -65,6 +63,7 @@ def research_node(state: MessagesState) -> Command[Literal["designer", END]]:
     
     # Execute research
     result = research_agent.invoke(state)
+    await log_to_clients(f"Research result: {result}")  # Log research result
     goto = get_next_node(result["messages"][-1], "researcher")
     
     # Format the last message as human message for next agent
@@ -78,7 +77,6 @@ def research_node(state: MessagesState) -> Command[Literal["designer", END]]:
         goto=goto,
     )
 
-
 def design_node(state: MessagesState) -> Command[Literal["builder", END]]:
     """Design node that creates the layout plan."""
     # Create designer agent
@@ -87,6 +85,7 @@ def design_node(state: MessagesState) -> Command[Literal["builder", END]]:
     
     # Execute design
     result = design_agent.invoke(state)
+    await log_to_clients(f"Design result: {result}")  # Log design result
     goto = get_next_node(result["messages"][-1], "designer")
     
     # Format the last message as human message for next agent
@@ -99,7 +98,6 @@ def design_node(state: MessagesState) -> Command[Literal["builder", END]]:
         update={"messages": result["messages"]},
         goto=goto,
     )
-
 
 def build_node(state: MessagesState) -> Command[Literal[END]]:
     """Build node that generates the final configuration."""
@@ -121,7 +119,6 @@ def build_node(state: MessagesState) -> Command[Literal[END]]:
         goto=END,
     )
 
-
 def create_supervisor_workflow():
     """
     Create and return the supervisor workflow.
@@ -142,3 +139,20 @@ def create_supervisor_workflow():
     
     # Compile the workflow
     return workflow.compile()
+
+import logging
+from aiohttp import web
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Function to send logs to WebSocket clients
+async def send_log_to_clients(message: str, clients: Set[web.WebSocketResponse]):
+    for client in clients:
+        await client.send_str(message)
+        logger.info(f"Sent log to client: {message}")
+
+def log_to_websocket(message: str, websocket: web.WebSocketResponse):
+    logger.info(message)
+    asyncio.create_task(websocket.send_str(message))
