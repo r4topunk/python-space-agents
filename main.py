@@ -48,6 +48,7 @@ async def create_space(user_request: str) -> List[Dict[str, Any]]:
                 last = step["messages"][-1]
                 pretty_print_message(last)
                 result.append({"type": last.type, "content": last.content})
+                await asyncio.sleep(1.1)  # 💤 Delay after each message (tune as needed)
         return result
     except Exception as e:
         pretty_print_error(f"Workflow error: {str(e)}")
@@ -78,7 +79,8 @@ async def websocket_handler(request):
                     await ws.send_json({
                         "name": "Space Builder",
                         "type": "Reply",
-                        "message": [r.content for r in results]
+                        # "message": [r.content for r in results]
+                        "message": [r["content"] for r in results if "content" in r]
                     })
 
                 except Exception as e:
