@@ -8,14 +8,21 @@ DEFAULT_MESSAGE = "create a space about nouns.wtf"
 def timestamp():
     return datetime.now().strftime("%H:%M:%S")
 
+HELP_TEXT = """
+🔘 Commands:
+  [P] Ping           → Check server
+  [M] Message        → Send default message
+  [C] Custom Message → Type your own message
+  [H] Help           → Show this help again
+  [Q] Quit           → Close connection
+"""
+
 async def handle_messages(ws):
     try:
         async for reply in ws:
-            print(f"📥 RAW INCOMING: {reply}")  # <- move here
-
             data = json.loads(reply)
             if not isinstance(data, dict):
-                print("🟠 Unrecognized data:", data)
+                print(f"{timestamp()} 🟠 Unrecognized data: {data}")
                 continue
 
             msg_type = data.get("type", "")
@@ -28,8 +35,7 @@ async def handle_messages(ws):
 
             elif msg_type == "Reply":
                 print(f"{timestamp()} 🟡 Final Reply:")
-                messages = data.get("message", [])
-                for m in messages:
+                for m in data.get("message", []):
                     if isinstance(m, dict):
                         print(f"💬 {m.get('type', 'Text')}: {m.get('content', '')}")
                     elif isinstance(m, str):
@@ -40,21 +46,18 @@ async def handle_messages(ws):
 
             elif msg_type.lower() == "session":
                 session = data.get("session", {})
-                client_id = session.get("client_id", "unknown")
-                status = session.get("status", "unknown")
-                print(f"{timestamp()} 🆔 Session started: ID={client_id}, Status={status}")
+                print(f"{timestamp()} 🆔 Session: ID={session.get('client_id', 'unknown')} Status={session.get('status', 'unknown')}")
 
             elif "error" in data:
                 print(f"{timestamp()} ❌ Error: {data.get('error')}")
-
             else:
                 print(f"{timestamp()} 🟠 Unknown message type: {data}")
     except websockets.ConnectionClosed:
         print("🔴 Connection closed.")
 
 async def send_commands(ws):
+    print(HELP_TEXT)  # Show once on startup
     while True:
-        print("\n🔘 Commands: [P]Ping | [M]Message | [C]Custom Message | [Q]Close Conn")
         key = await asyncio.to_thread(input, "🎮 Choose option: ")
         key = key.strip().lower()
 
@@ -71,8 +74,10 @@ async def send_commands(ws):
         elif key == "c":
             custom = await asyncio.to_thread(input, "📝 Enter your message: ")
             await ws.send(json.dumps({"message": custom}))
+        elif key == "h":
+            print(HELP_TEXT)
         else:
-            print("❌ Unknown key. Use P, M, C, or Q.")
+            print("❌ Unknown key. Type [H] for help.")
 
 async def connect_with_retry(uri):
     while True:
