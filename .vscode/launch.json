@@ -12,6 +12,13 @@
             "console": "integratedTerminal"
         },
         {
+            "name": "Run: Space Agents",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/run.py", // Adjusted path
+            "console": "integratedTerminal"
+        },
+        {
             "name": "Client: Space Agents",
             "type": "debugpy",
             "request": "launch",
