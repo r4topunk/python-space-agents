@@ -1,40 +1,35 @@
 import asyncio
 from typing import AsyncGenerator, Dict, Any
 from langchain_core.runnables import Runnable
+from utils.message_helpers import make_log, make_message
+from langchain_core.runnables import RunnableLambda
+from langgraph.config import get_stream_writer
 
-# Simulated async node function
 async def researcher_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
+    writer = get_stream_writer()
+    writer({"type": "LOG", "node": "researcher", "status": "start", "content": "Research started"})
+    
     prompt = state.get("input", "")
 
-    yield {
-        "type": "LOG",
-        "node": "researcher",
-        "status": "start",
-        "content": f"🔍 Researcher starting: {prompt}"
-    }
+    # Log start
+    yield make_log("researcher", "start", f"🔍 Researcher starting: {prompt}")
+    # Send a message (wrapped with our helper)
+    yield make_message(f"🔍 Researcher starting...")
 
-    # Simulate the LLM / image / link / rss tool work
-    # In real case, call your imageResearcher or multi-tool logic here
-    await asyncio.sleep(1.5)  # simulate delay
+    print("🚨 Yielded researcher start log")
+    await asyncio.sleep(1.5)  # simulate processing
 
-    # You can modify this with real LLM logic and output
-    new_message = {
-        "type": "message",
-        "content": f"Found resources for: {prompt}"
-    }
+    # Send a message (wrapped with our helper)
+    yield make_message(f"Found resources for: {prompt}")
 
-    yield {
-        "type": "LOG",
-        "node": "researcher",
-        "status": "end",
-        "content": f"✅ Researcher finished for: {prompt}"
-    }
+    # Log end
+    yield make_log("researcher", "end", f"✅ Researcher finished for: {prompt}")
 
-    # Return updated state with the message
+    # Update state with the message
     yield {
         **state,
-        "messages": state.get("messages", []) + [new_message]
+        "messages": state.get("messages", []) + [{"type": "message", "content": f"Found resources for: {prompt}"}]
     }
 
-# Export runnable
-run_researcher_node: Runnable = researcher_logic
+# run_researcher_node: Runnable = researcher_logic
+run_researcher_node: Runnable = RunnableLambda(researcher_logic)

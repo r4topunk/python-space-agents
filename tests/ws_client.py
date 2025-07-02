@@ -1,42 +1,67 @@
 import asyncio
 import websockets
 import json
+from datetime import datetime
 
-DEFAULT_MESSAGE = "this is a test"
+DEFAULT_MESSAGE = "create a space about nouns.wtf"
+
+def timestamp():
+    return datetime.now().strftime("%H:%M:%S")
 
 async def handle_messages(ws):
     try:
         async for reply in ws:
+            print(f"📥 RAW INCOMING: {reply}")  # <- move here
+
             data = json.loads(reply)
-            print("🟡 Received:")
-            if isinstance(data, dict):
-                msg_type = data.get("type", "")
-                if msg_type == "Reply":
-                    messages = data.get("message", [])
-                    for m in messages:
-                        if isinstance(m, dict):
-                            print(f"💬 {m.get('type', 'Text')}: {m.get('content', '')}")
-                        elif isinstance(m, str):
-                            print(f"💬 {m}")
-                elif msg_type == "LOG":
-                    print(f"📝 LOG: {data.get('content', '')}")
-                elif "error" in data:
-                    print(f"❌ Error: {data.get('error')}")
-                else:
-                    print(data)
+            if not isinstance(data, dict):
+                print("🟠 Unrecognized data:", data)
+                continue
+
+            msg_type = data.get("type", "")
+
+            if msg_type == "LOG":
+                node = data.get("node", "?").upper()
+                status = data.get("status", "").upper()
+                content = data.get("content", "")
+                print(f"{timestamp()} 🛰️ [{node}] {status}: {content}")
+
+            elif msg_type == "Reply":
+                print(f"{timestamp()} 🟡 Final Reply:")
+                messages = data.get("message", [])
+                for m in messages:
+                    if isinstance(m, dict):
+                        print(f"💬 {m.get('type', 'Text')}: {m.get('content', '')}")
+                    elif isinstance(m, str):
+                        print(f"💬 {m}")
+
+            elif msg_type == "message":
+                print(f"{timestamp()} 💬 {data.get('content', '')}")
+
+            elif msg_type.lower() == "session":
+                session = data.get("session", {})
+                client_id = session.get("client_id", "unknown")
+                status = session.get("status", "unknown")
+                print(f"{timestamp()} 🆔 Session started: ID={client_id}, Status={status}")
+
+            elif "error" in data:
+                print(f"{timestamp()} ❌ Error: {data.get('error')}")
+
             else:
-                print(data)
+                print(f"{timestamp()} 🟠 Unknown message type: {data}")
     except websockets.ConnectionClosed:
         print("🔴 Connection closed.")
 
 async def send_commands(ws):
     while True:
-        print("\n🔘 Commands: [P]ing | [M]essage | [C]ustom | [Q]uit")
+        print("\n🔘 Commands: [P]Ping | [M]Message | [C]Custom Message | [Q]Close Conn")
         key = await asyncio.to_thread(input, "🎮 Choose option: ")
         key = key.strip().lower()
 
         if key == "q":
             print("👋 Exiting.")
+            await ws.send(json.dumps({"message": "session"}))
+            await asyncio.sleep(0.2)
             await ws.close()
             break
         elif key == "p":
@@ -53,16 +78,18 @@ async def connect_with_retry(uri):
     while True:
         try:
             async with websockets.connect(uri) as ws:
-                print("🟢 Connected to server.")
+                print(f"{timestamp()} 🟢 Connected to server.")
+                await ws.send(json.dumps({"message": "session"}))
                 await asyncio.gather(
                     handle_messages(ws),
                     send_commands(ws)
                 )
         except (websockets.ConnectionClosedError, OSError) as e:
-            print(f"🔁 Disconnected. Retrying in 3s... ({e})")
+            print(f"{timestamp()} 🔁 Disconnected. Retrying in 3s... ({e})")
             await asyncio.sleep(3)
         except KeyboardInterrupt:
             print("👋 Exiting by user.")
             break
 
-asyncio.run(connect_with_retry("ws://localhost:10000"))
+if __name__ == "__main__":
+    asyncio.run(connect_with_retry("ws://localhost:10000"))
