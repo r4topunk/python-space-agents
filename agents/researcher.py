@@ -1,79 +1,96 @@
 """
-Researcher agent implementation.
+Researcher agent implementation with performance optimizations.
 """
 
 from langchain_core.tools import tool
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
+from langchain_tavily import TavilySearch
 from langgraph.prebuilt import create_react_agent
+import structlog
 
-# from tools.validation_tools import validate_research
-# from tools.image_tools import imageResearcher
+from tools.validation_tools import validate_research
+from utils.performance import performance_monitor
+
+logger = structlog.get_logger()
 
 
-# Researcher prompt
+# Enhanced researcher prompt with clear output format and efficiency focus
 RESEARCHER_PROMPT = """You are a research expert specialized in gathering information for space creation on the Blank Space platform.
 
-## YOUR ROLE
-Research the user's request and gather comprehensive information needed to build a relevant space for their community or project.
+## YOUR ROLE & EFFICIENCY REQUIREMENTS
+Research the user's request quickly and gather comprehensive information needed to build a relevant space. Focus on ACTIONABLE data that directly supports space creation.
 
-## REQUIRED OUTPUT FORMAT
-You MUST respond with a JSON object containing exactly these fields:
+## CRITICAL: REQUIRED OUTPUT FORMAT (STRICT JSON)
+You MUST respond with this EXACT JSON structure - no additional text:
+
+```json
 {
   "summary": "Brief 2-3 sentence summary of the community/topic",
-  "keyTopics": ["topic1", "topic2", "topic3"],
+  "keyTopics": ["topic1", "topic2", "topic3", "topic4", "topic5"],
   "socialAccounts": {
     "farcaster": ["@username1", "@username2"],
-    "twitter": ["@handle1", "@handle2"]
+    "twitter": ["@handle1", "@handle2", "@handle3"]
   },
   "relevantLinks": [
-    {"title": "Website Name", "url": "https://example.com", "type": "official"},
-    {"title": "Resource Name", "url": "https://example.com", "type": "resource"}
+    {"title": "Official Website", "url": "https://example.com", "type": "official"},
+    {"title": "Community Hub", "url": "https://example.com", "type": "community"},
+    {"title": "Resource Guide", "url": "https://example.com", "type": "resource"}
   ],
   "contentSuggestions": [
     {"type": "feed", "source": "farcaster", "filter": "keyword", "value": "dogs"},
-    {"type": "links", "purpose": "social", "content": "community links"},
-    {"type": "text", "purpose": "welcome", "content": "welcome message"}
+    {"type": "feed", "source": "twitter", "filter": "hashtag", "value": "#doglovers"},
+    {"type": "links", "purpose": "community", "content": "community links and resources"},
+    {"type": "text", "purpose": "welcome", "content": "Welcome to our dog lovers community! Share photos, tips, and connect with fellow dog enthusiasts."}
   ],
   "colors": {
-    "primary": "#hex",
-    "secondary": "#hex"
+    "primary": "#8B4513",
+    "secondary": "#DEB887"
   }
 }
+```
 
-## RESEARCH PRIORITIES
-1. Find official social media accounts and communities
-2. Identify key topics, hashtags, and keywords
-3. Locate relevant websites, resources, and tools
-4. Understand the community's interests and needs
-5. Suggest appropriate content types for the space
+## RESEARCH STRATEGY (OPTIMIZED)
+1. **Quick Search**: Use 1-2 targeted searches for official accounts and communities
+2. **Key Topics**: Identify 3-5 core topics/keywords for feed filtering
+3. **Social Discovery**: Find 2-3 relevant Farcaster/Twitter accounts
+4. **Resource Links**: Locate 2-3 high-value websites/resources
+5. **Content Strategy**: Suggest feed filters and welcome messaging
 
-Be thorough but concise. Focus on actionable information that will help create an engaging space for the Blank Space platform."""
+## PERFORMANCE TARGETS
+- Complete research in 1-2 search operations maximum
+- Focus on quality over quantity - better to have 2 great accounts than 10 mediocre ones
+- Prioritize information that directly translates to fidget content
+- Ensure all JSON fields are populated with realistic, actionable data
+
+## VALIDATION
+Always use the validate_research tool to verify your JSON output before final response."""
 
 
+@performance_monitor.time_operation("create_researcher_agent")
 def create_researcher_agent(llm: ChatOpenAI):
     """
-    Create and return the researcher agent.
+    Create and return the optimized researcher agent.
     
     Args:
-        llm: Language model to use for the agent
+        llm: Pre-configured language model to use for the agent
         
     Returns:
-        Researcher agent instance
+        Researcher agent instance with performance monitoring
     """
-    # Initialize tools
-    # image_researcher = tool(imageResearcher)
-    # validate_research_tool = tool(validate_research)
-    # rss_researcher = tool(rssResearcher)  # Ensure rssResearcher is defined
-    # social_network_researcher = tool(socialNetworkResearcher)  # Ensure socialNetworkResearcher is defined
+    logger.info("Creating researcher agent", model=llm.model_name)
+    
+    # Initialize tools - limit Tavily results for faster processing
+    tavily_search = TavilySearch(max_results=3)  # Reduced from 5 for performance
+    validate_research_tool = tool(validate_research)
     
     # Create the agent with tools
-    return create_react_agent(
+    agent = create_react_agent(
         llm,
-        tools=[
-            # image_researcher, validate_research_tool, rss_researcher, social_network_researcher
-            ],
+        tools=[tavily_search, validate_research_tool],
         name="researcher",
-        prompt=SystemMessage(content=RESEARCHER_PROMPT),  # Keep this line
-        # prompt=SystemMessage(content=RESEARCHER_PROMPT),  # Remove this line
+        prompt=SystemMessage(content=RESEARCHER_PROMPT),
     )
+    
+    logger.info("Researcher agent created successfully")
+    return agent
