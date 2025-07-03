@@ -10,6 +10,34 @@ from dotenv import load_dotenv
 console = Console()
 load_dotenv()
 
+APP_MODE = os.getenv("APP_MODE", "dev").lower()
+
+def animate_logo():
+    logo = {
+        "dev": """
+██╗  ██╗ █████╗ ███████╗██╗     
+██║ ██╔╝██╔══██╗██╔════╝██║     
+█████╔╝ ███████║███████╗██║     
+██╔═██╗ ██╔══██║╚════██║██║     
+██║  ██╗██║  ██║███████║███████╗
+╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝
+        """,
+        "prod": """
+███████╗██████╗  █████╗  ██████╗███████╗     ██████╗ ██╗   ██╗██╗     ██╗███████╗██████╗ 
+██╔════╝██╔══██╗██╔══██╗██╔════╝██╔════╝    ██╔═══██╗██║   ██║██║     ██║██╔════╝██╔══██╗
+█████╗  ██████╔╝███████║██║     █████╗      ██║   ██║██║   ██║██║     ██║█████╗  ██████╔╝
+██╔══╝  ██╔═══╝ ██╔══██║██║     ██╔══╝      ██║▄▄ ██║██║   ██║██║     ██║██╔══╝  ██╔══██╗
+███████╗██║     ██║  ██║╚██████╗███████╗    ╚██████╔╝╚██████╔╝███████╗██║███████╗██║  ██║
+╚══════╝╚═╝     ╚═╝  ╚═╝ ╚═════╝╚══════╝     ╚══▀▀═╝  ╚═════╝ ╚══════╝╚═╝╚══════╝╚═╝  ╚═╝
+        """
+    }
+
+    selected_logo = logo.get(APP_MODE, logo["dev"])
+    for line in selected_logo.strip("\n").splitlines():
+        console.print(f"[magenta]{line}[/magenta]")
+        time.sleep(0.05)
+    time.sleep(0.3)
+
 # === MENU ACTIONS === #
 def start_server():
     console.print("[bold green]\nStarting Kael server...[/bold green]")
@@ -42,15 +70,15 @@ def view_settings():
 
 def check_status():
     import requests
-    port = os.getenv("SERVER_PORT", "10000")
     try:
+        port = os.getenv("SERVER_PORT", "10000")
         response = requests.get(f"http://localhost:{port}/status", timeout=2)
         if response.status_code == 200:
             console.print("[green]✅ Kael is running![/green]")
         else:
             console.print(f"[yellow]⚠️ Unexpected status: {response.status_code}[/yellow]")
     except Exception:
-        console.print(f"[red]❌ Kael is not responding at localhost:{port}[/red]")
+        console.print("[red]❌ Kael is not responding.[/red]")
 
 def view_logs():
     log_file = "kael.log"
@@ -63,9 +91,11 @@ def view_logs():
 
 # === MAIN MENU === #
 def main_menu():
+    console.clear()
+    animate_logo()
+
     while True:
-        console.clear()
-        console.print(Panel("[bold magenta]🧠 KAEL: Space Agent CLI[/bold magenta]", expand=False))
+        console.print(Panel(f"[bold cyan]🧠 KAEL CLI - Mode: [yellow]{APP_MODE.upper()}[/yellow][/bold cyan]", expand=False))
         console.print("[cyan]1.[/] Start Kael server")
         console.print("[cyan]2.[/] Show example prompts")
         console.print("[cyan]3.[/] View settings")
@@ -93,7 +123,4 @@ def main_menu():
         input("\n[Press Enter to return to menu...]")
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] in ["--run", "--prod"]:
-        start_server()
-    else:
-        main_menu()
+    main_menu()

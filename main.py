@@ -1,13 +1,14 @@
 """
 Main execution script for the Python Space Agents system with performance optimizations.
 """
-
 import asyncio
+import json
 import os
 import sys
 import time
-from typing import List, Dict, Any, cast
-from langchain_core.messages import AnyMessage
+from typing import Set, List, Dict, Any, cast
+from aiohttp import web
+from langchain_core.messages import HumanMessage, AnyMessage
 import structlog
 
 # Configure structured logging
@@ -27,7 +28,9 @@ structlog.configure(
 
 logger = structlog.get_logger()
 
-# Try to load dotenv, but don't fail if not available
+connected_clients: Set[web.WebSocketResponse] = set()
+
+# Load environment variables from .env if available
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -41,8 +44,8 @@ except ImportError:
                     key, value = line.strip().split('=', 1)
                     os.environ[key] = value
 
+# Try loading required dependencies for LangChain-based workflow
 try:
-    from langchain_core.messages import HumanMessage
     from agents.supervisor import create_supervisor_workflow
     from utils.pretty_print import (
         pretty_print_message,
@@ -50,6 +53,7 @@ try:
         pretty_print_error,
         pretty_print_success,
     )
+    from utils.message_helpers import make_message, make_error, make_reply
     from utils.performance import performance_monitor, simple_cache
     from config.llm_config import clear_llm_cache
     DEPENDENCIES_AVAILABLE = True
@@ -61,51 +65,52 @@ except ImportError as e:
     print("💡 Or use: python run.py for demo mode")
     DEPENDENCIES_AVAILABLE = False
 
+SUPERVISOR = create_supervisor_workflow()
 
 @performance_monitor.time_operation("create_space")
-async def create_space(user_request: str) -> List[Dict[str, Any]]:
+async def create_space(user_request: str, ws: web.WebSocketResponse):
     """
-    Create a space configuration based on user request with performance monitoring.
-    
-    Args:
-        user_request: Natural language description of the space to create
-        
-    Returns:
-        List of messages from the workflow execution
+    Create a space configuration based on user request with performance monitoring,
+    streaming results back to the client.
     """
     if not DEPENDENCIES_AVAILABLE:
-        raise ImportError("Required dependencies not available. Please install them first.")
-    
+        raise ImportError("Dependencies not available.")
+
     start_time = time.time()
     logger.info("Starting space creation", request=user_request[:100])
-    
+
+    initial_state = {
+        "input": user_request,
+        "messages": [HumanMessage(content=user_request)]
+    }
+
     try:
-        pretty_print_step("Initializing", "Setting up the optimized supervisor workflow...")
-        
-        # Create the supervisor workflow
-        workflow = create_supervisor_workflow()
-        
-        pretty_print_step("Processing", f"Creating space for: {user_request}")
-        
-        # Execute the workflow with performance monitoring
-        result = []
         step_count = 0
-        
-        async for step in workflow.astream(
-            {"messages": cast(List[AnyMessage], [HumanMessage(content=user_request)])},
+        async for step in SUPERVISOR.astream(
+            input=initial_state,
             stream_mode="values",
             config={"recursion_limit": 50}
         ):
-            if "messages" in step and step["messages"]:
-                last_message = step["messages"][-1]
-                pretty_print_message(last_message)
-                print("─" * 50)
-                result.append(last_message)
-                step_count += 1
-        
+            step_count += 1
+            if isinstance(step, dict):
+                if step.get("type") == "LOG":
+                    logger.info("Sending LOG to client", content=step.get('content'))
+                    await ws.send_json(step)
+                
+                elif step.get("type") == "message" and "content" in step:
+                    logger.info("Sending MESSAGE to client", content=step.get('content'))
+                    await ws.send_json(step)
+                
+                elif "messages" in step:
+                    for msg in step["messages"]:
+                        content = getattr(msg, "content", None)
+                        if not content and isinstance(msg, dict):
+                            content = msg.get("content")
+                        if content and content.strip().lower() != user_request.strip().lower():
+                            pretty_print_message(msg)
+                            await ws.send_json(make_message(content))
+
         duration = time.time() - start_time
-        
-        # Log performance metrics
         cache_stats = simple_cache.get_stats()
         performance_report = performance_monitor.get_report()
         
@@ -116,76 +121,65 @@ async def create_space(user_request: str) -> List[Dict[str, Any]]:
             cache_hit_rate=cache_stats["hit_rate"],
             total_operations=performance_report["summary"]["total_operations"]
         )
-        
         pretty_print_success(f"Space creation completed in {duration:.2f}s with {step_count} steps!")
-        
-        # Print performance summary
-        if cache_stats["hit_rate"] > 0:
-            pretty_print_step("Performance", f"Cache hit rate: {cache_stats['hit_rate']}%")
-        
-        return result
-        
-    except Exception as error:
-        duration = time.time() - start_time
-        logger.error("Space creation failed", error=str(error), duration=round(duration, 2))
-        pretty_print_error(f"Error creating space: {str(error)}")
-        raise error
 
-
-def main():
-    """Main entry point for the application with performance optimizations."""
-    if not DEPENDENCIES_AVAILABLE:
-        print("❌ Required dependencies not available.")
-        print("🔧 Please run: ./venv/bin/pip install -r requirements.txt")
-        print("💡 Or use: python run.py for demo mode")
-        return
-    
-    # Check for required environment variables
-    required_vars = ["OPENAI_API_KEY"]
-    missing_vars = [var for var in required_vars if not os.getenv(var)]
-    
-    if missing_vars:
-        pretty_print_error(f"Missing required environment variables: {', '.join(missing_vars)}")
-        pretty_print_step("Setup", "Please set the following environment variables:")
-        for var in missing_vars:
-            print(f"  export {var}='your_key_here'")
-        return
-    
-    logger.info("Starting application")
-    
-    # Example usage with enhanced prompt
-    example_request = (
-        "Create a space for a community of dog lovers who are active on Farcaster "
-        "and interested in dog training, sharing photos of their pets, and connecting "
-        "with other dog enthusiasts. Include feeds for dog-related content, links to "
-        "training resources, and a welcoming community atmosphere."
-    )
-    
-    try:
-        start_time = time.time()
-        result = asyncio.run(create_space(example_request))
-        total_time = time.time() - start_time
-        
-        pretty_print_step("Completed", f"Generated {len(result)} workflow steps in {total_time:.2f}s")
-        
-        # Show performance summary
-        performance_report = performance_monitor.get_report()
-        cache_stats = simple_cache.get_stats()
-        
-        if performance_report["summary"]["total_operations"] > 0:
-            pretty_print_step("Performance Summary", 
-                f"Operations: {performance_report['summary']['total_operations']} | "
-                f"Cache hits: {cache_stats['hits']} | "
-                f"Slowest: {performance_report['summary']['slowest_operation']}"
-            )
-        
-        # Clear caches for next run
-        clear_llm_cache()
-        
     except Exception as e:
-        logger.error("Application error", error=str(e))
-        pretty_print_error(f"Application error: {str(e)}")
+        duration = time.time() - start_time
+        logger.error("Space creation failed", error=str(e), duration=round(duration, 2))
+        pretty_print_error(f"Workflow error: {str(e)}")
+        await ws.send_json(make_error(str(e)))
 
+async def websocket_handler(request):
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+    connected_clients.add(ws)
+    print("🟢 Client connected")
+
+    try:
+        async for msg in ws:
+            if msg.type == web.WSMsgType.TEXT:
+                try:
+                    data = json.loads(msg.data)
+                    user_input = data.get("message", "")
+
+                    if user_input == "ping":
+                        await ws.send_json(make_reply(["pong"]))
+                    elif user_input == "session":
+                        await ws.send_json(make_reply(["session acknowledged"]))
+                    elif user_input.strip():
+                        await create_space(user_input, ws)
+
+                except Exception as e:
+                    await ws.send_json(make_error(str(e)))
+
+            elif msg.type == web.WSMsgType.ERROR:
+                print(f"WebSocket error: {ws.exception()}")
+
+    finally:
+        connected_clients.remove(ws)
+        print("🔴 Client disconnected")
+
+    return ws
+
+async def handle_status(_: web.Request):
+    return web.Response(text="✅ Agent is running!")
+
+async def start_combined_server():
+    app = web.Application()
+    app.router.add_get("/status", handle_status)
+    app.router.add_get("/", websocket_handler)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+
+    site = web.TCPSite(runner, "0.0.0.0", 10000)
+    await site.start()
+    print("🚀 Server running on http://localhost:10000")
+
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(start_combined_server())
+    except KeyboardInterrupt:
+        print("🛑 Server shutdown")

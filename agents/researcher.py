@@ -1,17 +1,4 @@
 """
-Researcher agent implementation.
-"""
-
-from langchain_core.tools import tool
-from langchain_core.messages import SystemMessage
-from langchain_openai import ChatOpenAI
-from langchain_tavily import TavilySearch
-from langgraph.prebuilt import create_react_agent
-
-from tools.validation_tools import validate_research
-
-
-"""
 Researcher agent implementation with performance optimizations.
 """
 
@@ -95,11 +82,12 @@ def create_researcher_agent(llm: ChatOpenAI):
     
     # Initialize tools - limit Tavily results for faster processing
     tavily_search = TavilySearch(max_results=3)  # Reduced from 5 for performance
+    validate_research_tool = tool(validate_research)
     
     # Create the agent with tools
     agent = create_react_agent(
         llm,
-        tools=[tavily_search, validate_research],
+        tools=[tavily_search, validate_research_tool],
         name="researcher",
         prompt=SystemMessage(content=RESEARCHER_PROMPT),
     )
