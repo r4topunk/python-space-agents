@@ -26,6 +26,7 @@ async def handle_messages(ws):
                 continue
 
             msg_type = data.get("type", "")
+            # print(data)
 
             if msg_type == "LOG":
                 node = data.get("node", "?").upper()
@@ -33,7 +34,13 @@ async def handle_messages(ws):
                 content = data.get("content", "")
                 print(f"{timestamp()} 🛰️ [{node}] {status}: {content}")
 
-            elif msg_type == "Reply":
+            elif "LOG" in msg_type:
+                node = data.get("name", "?").upper()
+                status = data.get("status", "").upper()
+                content = data.get("message", "")
+                print(f"{timestamp()} 🛰️ [{node}] {status}: {content}")
+
+            elif msg_type == "Reply" or msg_type == "REPLY":
                 print(f"{timestamp()} 🟡 Final Reply:")
                 for m in data.get("message", []):
                     if isinstance(m, dict):

@@ -7,7 +7,7 @@ async def builder_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any],
     prompt = state.get("input", "")
     yield make_log("builder", "start", f"🔧 Builder starting for: {prompt}")
 
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(2.5)
 
     layout = {
         "grid": state.get("grid", "12x10"),

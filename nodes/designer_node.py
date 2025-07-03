@@ -8,7 +8,7 @@ async def designer_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any]
     prompt = state.get("input", "")
 
     yield make_log("designer", "start", f"🎨 Designer starting for: {prompt}")
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(2.5)
 
     fidgets = plan.get("fidgets", [])
     grid = plan.get("grid", "12x10")

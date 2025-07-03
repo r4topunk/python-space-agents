@@ -14,13 +14,13 @@ async def researcher_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, An
     # Log start
     yield make_log("researcher", "start", f"🔍 Researcher starting: {prompt}")
     # Send a message (wrapped with our helper)
-    yield make_message(f"🔍 Researcher starting...")
+    # yield make_message(f"🔍 Researcher starting...")
 
     print("🚨 Yielded researcher start log")
-    await asyncio.sleep(1.5)  # simulate processing
+    await asyncio.sleep(2.5)  # simulate processing
 
     # Send a message (wrapped with our helper)
-    yield make_message(f"Found resources for: {prompt}")
+    # yield make_message(f"Found resources for: {prompt}")
 
     # Log end
     yield make_log("researcher", "end", f"✅ Researcher finished for: {prompt}")
@@ -28,7 +28,7 @@ async def researcher_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, An
     # Update state with the message
     yield {
         **state,
-        "messages": state.get("messages", []) + [{"type": "message", "content": f"Found resources for: {prompt}"}]
+        "messages": state.get("messages", []) + [{"type": "message", "content": f"Final Step - Found resources for: {prompt}"}]
     }
 
 # run_researcher_node: Runnable = researcher_logic

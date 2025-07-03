@@ -7,7 +7,7 @@ async def planner_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any],
     prompt = state.get("input", "")
 
     yield make_log("planner", "start", f"🧠 Planner starting: {prompt}")
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(2.5)
 
     plan = {
         "grid": "12x10",
