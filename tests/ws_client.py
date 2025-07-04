@@ -4,8 +4,8 @@ import json
 from datetime import datetime
 
 # === Config ===
-# SERVER_URL = "ws://localhost:10000"
-SERVER_URL = "wss://space-builder-server.onrender.com"
+SERVER_URL = "ws://localhost:10000"
+# SERVER_URL = "wss://space-builder-server.onrender.com"
 DEFAULT_MESSAGE = "bitcoin community"
 
 # === UI Helpers ===
@@ -123,6 +123,7 @@ async def handle_messages(ws):
 
 async def send_commands(ws):
     print(HELP_TEXT)
+    print("Default Message: " + DEFAULT_MESSAGE)
     while True:
         key = await asyncio.to_thread(input, "🎮 Choose option: ")
         key = key.strip().lower()
