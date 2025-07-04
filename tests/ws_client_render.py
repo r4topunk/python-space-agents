@@ -3,12 +3,8 @@ import websockets
 import json
 from datetime import datetime
 
-# === Config ===
-# SERVER_URL = "ws://localhost:10000"
-SERVER_URL = "wss://space-builder-server.onrender.com"
-DEFAULT_MESSAGE = "bitcoin community"
+DEFAULT_MESSAGE = "create a space about nouns.wtf"
 
-# === UI Helpers ===
 def timestamp():
     return datetime.now().strftime("%H:%M:%S")
 
@@ -27,8 +23,12 @@ def render_terminal_grid(layout, grid_width=12, grid_height=10):
 
     for idx, item in enumerate(layout, 1):
         i = item.get("i", "?")
-        x, y, w, h = item.get("x", 0), item.get("y", 0), item.get("w", 1), item.get("h", 1)
+        x = item.get("x", 0)
+        y = item.get("y", 0)
+        w = item.get("w", 1)
+        h = item.get("h", 1)
 
+        # Validate bounds
         if x + w > grid_width or y + h > grid_height:
             print(f"❌ Invalid position/size for: {i}")
             continue
@@ -36,12 +36,12 @@ def render_terminal_grid(layout, grid_width=12, grid_height=10):
         label = f"F{idx}"
         for dy in range(h):
             for dx in range(w):
-                grid_y = y + dy
-                grid_x = x + dx
-                grid[grid_y][grid_x] = f"{label:>3}" if dy == 0 and dx == 0 else " ░ "
-        # legend.append(f"{label} = {i}")
-        legend.append(f"{label} = {i} → pos({x},{y}) size({w}x{h})")
+                if dy == 0 and dx == 0:
+                    grid[y + dy][x + dx] = f"{label:>3}"
+                else:
+                    grid[y + dy][x + dx] = " ░ "
 
+        legend.append(f"{label} = {i}")
 
     print("\n🧱 Grid Layout Preview:\n")
     for row in grid:
@@ -51,11 +51,7 @@ def render_terminal_grid(layout, grid_width=12, grid_height=10):
         print("  ", l)
     print()
 
-# === WebSocket Handlers ===
 async def handle_messages(ws):
-    builder_buffer = ""
-    collecting_builder = False
-
     try:
         async for reply in ws:
             data = json.loads(reply)
@@ -63,61 +59,47 @@ async def handle_messages(ws):
                 print(f"{timestamp()} 🟠 Unrecognized data: {data}")
                 continue
 
-            msg_type = data.get("type", "").lower()
+            msg_type = data.get("type", "")
+            if msg_type == "LOG":
+                node = data.get("node", "?").upper()
+                status = data.get("status", "").upper()
+                content = data.get("content", "")
+                print(f"{timestamp()} 🛰️ [{node}] {status}: {content}")
 
-            # --- Logs ---
-            if msg_type == "log":
-                print(f"{timestamp()} 🛰️ [{data.get('node', '?').upper()}] {data.get('status', '').upper()}: {data.get('content', '')}")
+            elif "LOG" in msg_type:
+                node = data.get("name", "?").upper()
+                status = data.get("status", "").upper()
+                content = data.get("message", "")
+                print(f"{timestamp()} 🛰️ [{node}] {status}: {content}")
 
-            elif "log" in msg_type and msg_type != "builder_logs":
-                print(f"{timestamp()} 🛰️ [{data.get('name', '?').upper()}] {data.get('status', '').upper()}: {data.get('message', '')}")
-
-            # --- Reply ---
-            elif msg_type == "reply":
-                print(f"{timestamp()} 🟡 Reply:")
+            elif msg_type.lower() == "reply":
+                print(f"{timestamp()} 🟡 Final Reply:")
                 for m in data.get("message", []):
                     if isinstance(m, dict):
-                        print(f"💬 {m.get('type', 'Text')}: {m.get('content', '')}")
+                        content = m.get("content", "")
+                        print(f"💬 {m.get('type', 'Text')}: {content}")
+                        if content.strip().startswith("{") and "layoutConfig" in content:
+                            try:
+                                parsed = json.loads(content)
+                                layout = parsed.get("layoutDetails", {}).get("layoutConfig", {}).get("layout", [])
+                                render_terminal_grid(layout)
+                            except Exception as e:
+                                print(f"⚠️ Could not render grid: {e}")
                     elif isinstance(m, str):
                         print(f"💬 {m}")
 
-            # --- Message ---
             elif msg_type == "message":
                 print(f"{timestamp()} 💬 {data.get('content', '')}")
 
-            # --- Session ---
-            elif msg_type == "session":
-                s = data.get("session", {})
-                print(f"{timestamp()} 🆔 Session: ID={s.get('client_id', 'unknown')} Status={s.get('status', 'unknown')}")
+            elif msg_type.lower() == "session":
+                session = data.get("session", {})
+                print(f"{timestamp()} 🆔 Session: ID={session.get('client_id', 'unknown')} Status={session.get('status', 'unknown')}")
 
-            # --- Error ---
             elif "error" in data:
                 print(f"{timestamp()} ❌ Error: {data.get('error')}")
 
-            # --- Builder Logs (streamed JSON) ---
-            elif msg_type == "builder_logs":
-                for chunk in data.get("message", []):
-                    if isinstance(chunk, str):
-                        builder_buffer += chunk
-                        collecting_builder = True
-
-                try:
-                    parsed = json.loads(builder_buffer)
-                    print(f"\n{timestamp()} 🧩 Builder Output:\n")
-                    print(json.dumps(parsed, indent=2))
-
-                    layout = parsed.get("layoutDetails", {}).get("layoutConfig", {}).get("layout", [])
-                    if layout:
-                        render_terminal_grid(layout)
-
-                    builder_buffer = ""
-                    collecting_builder = False
-
-                except json.JSONDecodeError:
-                    continue  # Keep buffering
             else:
                 print(f"{timestamp()} 🟠 Unknown message type: {data}")
-
     except websockets.ConnectionClosed:
         print("🔴 Connection closed.")
 
@@ -145,14 +127,16 @@ async def send_commands(ws):
         else:
             print("❌ Unknown key. Type [H] for help.")
 
-# === Main ===
 async def connect_with_retry(uri):
     while True:
         try:
             async with websockets.connect(uri) as ws:
                 print(f"{timestamp()} 🟢 Connected to server.")
                 await ws.send(json.dumps({"message": "session"}))
-                await asyncio.gather(handle_messages(ws), send_commands(ws))
+                await asyncio.gather(
+                    handle_messages(ws),
+                    send_commands(ws)
+                )
         except (websockets.ConnectionClosedError, OSError) as e:
             print(f"{timestamp()} 🔁 Disconnected. Retrying in 3s... ({e})")
             await asyncio.sleep(3)
@@ -162,6 +146,8 @@ async def connect_with_retry(uri):
 
 if __name__ == "__main__":
     try:
-        asyncio.get_running_loop().run_until_complete(connect_with_retry(SERVER_URL))
+        asyncio.get_running_loop().run_until_complete(
+            connect_with_retry("wss://space-builder-server.onrender.com")
+        )
     except RuntimeError:
-        asyncio.run(connect_with_retry(SERVER_URL))
+        asyncio.run(connect_with_retry("wss://space-builder-server.onrender.com"))
