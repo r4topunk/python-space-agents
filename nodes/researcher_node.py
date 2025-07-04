@@ -1,35 +1,57 @@
 import asyncio
-from typing import AsyncGenerator, Dict, Any
-from langchain_core.runnables import Runnable
-from utils.message_helpers import make_log, make_message
+from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport
 from langchain_core.runnables import RunnableLambda
+from typing import AsyncGenerator, Dict, Any
+from utils.message_helpers import make_log
 from langgraph.config import get_stream_writer
+import json
+
+MCP_ENDPOINT = "http://localhost:8000/mcp"
+transport = StreamableHttpTransport(url=MCP_ENDPOINT)
 
 async def researcher_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
     writer = get_stream_writer()
-    writer({"type": "LOG", "node": "researcher", "status": "start", "content": "Research started"})
-    
     prompt = state.get("input", "")
 
-    # Log start
+    writer({"type": "LOG", "node": "researcher", "status": "start", "content": f"Research started: {prompt}"})
     yield make_log("researcher", "start", f"🔍 Researcher starting: {prompt}")
-    # Send a message (wrapped with our helper)
-    # yield make_message(f"🔍 Researcher starting...")
 
-    print("🚨 Yielded researcher start log")
-    await asyncio.sleep(2.5)  # simulate processing
+    try:
+        async with Client(transport) as client:
+            await client.session.initialize()
 
-    # Send a message (wrapped with our helper)
-    # yield make_message(f"Found resources for: {prompt}")
+            result = await client.call_tool("image_search", {
+                "query": prompt,
+                "max_results": 5,
+                "min_quality_score": 80,
+                "min_resolution": [1024, 768]
+            })
 
-    # Log end
-    yield make_log("researcher", "end", f"✅ Researcher finished for: {prompt}")
+            # ✅ Extract images from result.content
+            text = result.content[0].text
+            images = json.loads(text)
 
-    # Update state with the message
-    yield {
-        **state,
-        "messages": state.get("messages", []) + [{"type": "message", "content": f"Final Step - Found resources for: {prompt}"}]
-    }
+            yield make_log("researcher", "end", f"✅ Found {len(images)} images for '{prompt}'")
 
-# run_researcher_node: Runnable = researcher_logic
-run_researcher_node: Runnable = RunnableLambda(researcher_logic)
+            yield {
+                **state,
+                "images": images,
+                "messages": state.get("messages", []) + [{
+                    "type": "message",
+                    "content": f"📸 Found {len(images)} images for '{prompt}'"
+                }]
+            }
+
+    except Exception as e:
+        error_msg = f"❌ MCP request failed: {e}"
+        yield make_log("researcher", "error", error_msg)
+        yield {
+            **state,
+            "messages": state.get("messages", []) + [{
+                "type": "message",
+                "content": error_msg
+            }]
+        }
+
+run_researcher_node = RunnableLambda(researcher_logic)
