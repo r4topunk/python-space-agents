@@ -1,0 +1,31 @@
+✅ New Sprint Goal: “Reliable Smart Builder”
+🎯 Objective:
+Create a LangGraph pipeline where:
+
+Researcher gathers media + content (using MCPs like RSS, Image, Video).
+
+Planner analyzes and selects what to include.
+
+Designer places items in grid (with bounds and overlaps logic).
+
+Builder generates final JSON config (with validation + pretty output).
+
+🛠️ Key Tasks for Sprint Setup
+Task	Description
+🧠 Define spec	Final JSON config schema — what must be in every output? (layout, theme, fidgets, etc.)
+🧩 Create reusable validators	Before Builder emits JSON, run checks: size, spacing, duplicate IDs, etc.
+🎨 Improve grid logic	Make Designer simulate layout in memory and check collisions
+🚀 Use LangGraph	Set up flows with branching (e.g., fallback if researcher finds nothing)
+📦 Build Modular MCPs	One per type: image, rss, video, etc. Agent can mix & match
+🧪 Terminal client = testbench	You already nailed this. It helps human + model debugging in one view
+
+🔮 Future-Ready Design
+You're planting seeds for these future expansions:
+
+👯‍♀️ Multi-agent workstreams (different bots working on the same space)
+
+🧑‍🎨 Agent stylists (tone/color pickers for vibe branding)
+
+🧠 Memory-aware personalization (user’s last choices affect new builds)
+
+🌍 Multilingual/localized fidget layouts

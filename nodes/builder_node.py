@@ -1,76 +1,77 @@
 import asyncio
-import json
-from typing import AsyncGenerator, Dict, Any
-from langchain_core.runnables import Runnable
+from typing import Dict, Any, AsyncGenerator
+from langchain_core.runnables import RunnableLambda
 from utils.message_helpers import make_log, make_message
+from utils.pretty_print import print_grid_layout
 
-def render_terminal_grid(layout, grid_width=12, grid_height=10):
-    grid = [[" . " for _ in range(grid_width)] for _ in range(grid_height)]
-    legend = []
+DEFAULT_THEME = {
+    "id": "default",
+    "name": "Default Theme",
+    "properties": {
+        "font": "Inter",
+        "fontColor": "#000000",
+        "headingsFont": "Poppins",
+        "headingsFontColor": "#333333",
+        "background": "#ffffff",
+        "fidgetBackground": "#f5f5f5",
+        "fidgetBorderColor": "#dddddd",
+        "fidgetShadow": "none",
+        "fidgetBorderRadius": "8px",
+        "gridSpacing": "8"
+    }
+}
 
-    for idx, item in enumerate(layout, 1):
-        i = item.get("i", "?")
-        x = item.get("x", 0)
-        y = item.get("y", 0)
-        w = item.get("w", 1)
-        h = item.get("h", 1)
-
-        if x + w > grid_width or y + h > grid_height:
-            print(f"❌ Invalid position/size for: {i}")
-            continue
-
-        label = f"F{idx}"
-        for dy in range(h):
-            for dx in range(w):
-                if dy == 0 and dx == 0:
-                    grid[y + dy][x + dx] = f"{label:>3}"
-                else:
-                    grid[y + dy][x + dx] = " ░ "
-
-        legend.append(f"{label} = {i} @ ({x},{y}) [{w}x{h}]")
-
-    print("\n🧱 Grid Layout Preview:\n")
-    for row in grid:
-        print("".join(row))
-    print("\n📘 Legend:")
-    for l in legend:
-        print("  ", l)
-    print()
-
+def build_fidget_map(fidgets: list[dict]) -> dict:
+    return {
+        f["id"]: {
+            "id": f["id"],
+            "fidgetType": f["type"],
+            "config": {
+                "editable": True,
+                "settings": f.get("settings", {}),
+                "data": {}
+            }
+        }
+        for f in fidgets
+    }
 
 async def builder_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
     prompt = state.get("input", "")
+    fidgets = state.get("designed_fidgets", [])
+    layout = state.get("layout", {}).get("layout", [])
+    layout_id = state.get("layoutID", "custom-space")
+
     yield make_log("builder", "start", f"🔧 Builder starting for: {prompt}")
+    await asyncio.sleep(0.5)
 
-    await asyncio.sleep(2.5)
+    fidget_map = build_fidget_map(fidgets)
 
-    layout_items = state.get("designed_fidgets", [])
-    layout = {
-        "layoutID": "auto-generated",
+    final_config = {
+        "layoutID": layout_id,
         "layoutDetails": {
-            "layoutFidget": "generated-layout",
+            "layoutFidget": layout_id,
             "layoutConfig": {
-                "layout": layout_items
+                "layout": layout
             }
-        }
+        },
+        "fidgetInstanceDatums": fidget_map,
+        "theme": DEFAULT_THEME,
+        "isEditable": True,
+        "fidgetTrayContents": []
     }
 
-    # 👇 Render the grid layout in the server console
-    print("\n🔍 Rendering layout on server side:")
-    render_terminal_grid(layout_items)
+    # 📦 Server-side Grid Render
+    print("🔍 Rendering layout on server side:")
+    print_grid_layout(layout)
 
-    # Send layout JSON as message for client use
-    yield make_message(json.dumps(layout, indent=2))
-
+    message = f"✅ Final layout generated with {len(fidgets)} fidgets"
+    yield make_message(message)
     yield make_log("builder", "end", f"✅ Builder finished for: {prompt}")
 
     yield {
         **state,
-        "messages": state.get("messages", []) + [{
-            "type": "message",
-            "content": f"✅ Final layout generated with {len(layout_items)} fidgets"
-        }],
-        "output": layout
+        "output": final_config,
+        "messages": state.get("messages", []) + [{"type": "message", "content": message}]
     }
 
-run_builder_node: Runnable = builder_logic
+run_builder_node = RunnableLambda(builder_logic)

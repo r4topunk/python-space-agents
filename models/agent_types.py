@@ -7,6 +7,40 @@ from pydantic import BaseModel, Field
 from enum import Enum
 
 
+from typing import Literal, TypedDict, Optional
+
+class LLMConfig(TypedDict):
+    provider: Literal["openai", "anthropic", "venice"]
+    base_url: str
+    api_key: str
+    model: str
+    temperature: float
+
+# Default config for all agents
+AGENT_MODELS: dict[str, LLMConfig] = {
+    "intent_extractor": {
+        "provider": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "api_key": "",  # to be loaded from env
+        "model": "gpt-4o",
+        "temperature": 0.2
+    },
+    "planner": {
+        "provider": "venice",
+        "base_url": "https://api.venice.ai/api/v1",
+        "api_key": "",
+        "model": "mixtral-8x7b",
+        "temperature": 0.4
+    },
+    "builder": {
+        "provider": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "api_key": "",
+        "model": "gpt-3.5-turbo",
+        "temperature": 0.3
+    }
+}
+
 class FidgetType(str, Enum):
     """Valid fidget types for validation."""
     TEXT = "text"

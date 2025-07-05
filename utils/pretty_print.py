@@ -154,3 +154,31 @@ def pretty_print_message(message):
         header = "💬 [Message]"
 
     print(f"\n{header}\n{content}\n")
+
+
+def print_grid_layout(layout: dict):
+    """
+    Renders a grid preview and legend based on layoutConfig.
+    """
+    layout_config = layout.get("layout", [])
+    grid = [["░"] * 12 for _ in range(10)]
+    legend = []
+
+    for idx, f in enumerate(layout_config):
+        x, y, w, h = f["x"], f["y"], f["w"], f["h"]
+        label = f"F{idx + 1}"
+        for dy in range(h):
+            for dx in range(w):
+                gx = x + dx
+                gy = y + dy
+                if 0 <= gx < 12 and 0 <= gy < 10:
+                    grid[gy][gx] = label if dx == 0 and dy == 0 else "."
+
+        legend.append(f"   {label} = {f['i']} @ ({x},{y}) [{w}x{h}]")
+
+    print("\n🧱 Grid Layout Preview:\n")
+    for row in grid:
+        print(" ", " ".join(row))
+    print("\n📘 Legend:")
+    for line in legend:
+        print(line)

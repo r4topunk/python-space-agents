@@ -3,6 +3,7 @@ import json
 import os
 from aiohttp import web
 from typing import Set, Dict, Any
+from models import load_model_settings
 from utils.message_helpers import make_reply, make_error
 
 connected_clients: Set[web.WebSocketResponse] = set()
@@ -120,6 +121,7 @@ async def start_combined_server():
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
+    load_model_settings()
     try:
         asyncio.run(start_combined_server())
     except KeyboardInterrupt:

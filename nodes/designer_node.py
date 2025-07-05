@@ -1,40 +1,55 @@
 import asyncio
-from typing import AsyncGenerator, Dict, Any
-from langchain_core.runnables import Runnable
-from utils.message_helpers import make_log, make_message
+from typing import Dict, Any, AsyncGenerator
+from langchain_core.runnables import RunnableLambda
+from utils.message_helpers import make_log
+
+GRID_WIDTH = 12
+GRID_HEIGHT = 10
+
+def generate_layout(fidgets: list[dict]) -> list[dict]:
+    layout = []
+    x, y = 0, 0
+    row_height = 3  # fixed height for now
+
+    for i, f in enumerate(fidgets):
+        w = f.get("preferred_width", 3)
+        h = f.get("preferred_height", row_height)
+
+        if x + w > GRID_WIDTH:
+            x = 0
+            y += row_height
+
+        layout.append({
+            "i": f["id"],
+            "x": x,
+            "y": y,
+            "w": w,
+            "h": h,
+            "minW": 2,
+            "maxW": 6,
+            "minH": 2,
+            "maxH": 6,
+            "moved": False,
+            "static": False
+        })
+
+        x += w
+
+    return layout
 
 async def designer_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any], None]:
-    plan = state.get("plan", {})
-    prompt = state.get("input", "")
+    fidgets = state.get("designed_fidgets", [])
 
-    yield make_log("designer", "start", f"🎨 Designer starting for: {prompt}")
-    await asyncio.sleep(2.5)
+    yield make_log("designer", "start", f"🎨 Designing layout for {len(fidgets)} fidgets")
 
-    fidgets = plan.get("fidgets", [])
-    grid = plan.get("grid", "12x10")
-
-    positions = [
-        {
-            "type": f,
-            "x": (i % 4) * 3,
-            "y": (i // 4) * 3,
-            "w": 3,
-            "h": 3
-        }
-        for i, f in enumerate(fidgets)
-    ]
-
-    yield make_message(f"Designed layout with {len(positions)} fidgets in grid {grid}")
-    yield make_log("designer", "end", f"✅ Designer finished for: {prompt}")
+    layout = generate_layout(fidgets)
+    yield make_log("designer", "end", f"📐 Assigned {len(layout)} layout blocks in grid {GRID_WIDTH}x{GRID_HEIGHT}")
 
     yield {
         **state,
-        "messages": state.get("messages", []) + [{
-            "type": "message",
-            "content": f"Designed layout with {len(positions)} fidgets in grid {grid}"
-        }],
-        "designed_fidgets": positions,
-        "grid": grid
+        "layout": {
+            "layout": layout
+        }
     }
 
-run_designer_node: Runnable = designer_logic
+run_designer_node = RunnableLambda(designer_logic)
