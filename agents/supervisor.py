@@ -8,22 +8,19 @@ from nodes.researcher_node import run_researcher_node
 from nodes.designer_node import run_designer_node
 from nodes.builder_node import run_builder_node
 
-def create_supervisor_workflow() -> Runnable:
+async def create_supervisor_workflow() -> Runnable:
     workflow = StateGraph(Dict[str, Any])
-
-    # Add nodes
-    workflow.add_node("intent_extractor", intent_extractor)  # ✅ NEW
+    workflow.add_node("intent_extractor", intent_extractor)
     workflow.add_node("researcher", run_researcher_node)
     workflow.add_node("planner", run_planner_node)
     workflow.add_node("designer", run_designer_node)
     workflow.add_node("builder", run_builder_node)
 
-    # Connect nodes
-    workflow.set_entry_point("intent_extractor")             # ✅ START HERE
-    workflow.add_edge("intent_extractor", "researcher")      # ✅ Then to researcher
+    workflow.set_entry_point("intent_extractor")
+    workflow.add_edge("intent_extractor", "researcher")
     workflow.add_edge("researcher", "planner")
     workflow.add_edge("planner", "designer")
     workflow.add_edge("designer", "builder")
     workflow.add_edge("builder", END)
-
+    
     return workflow.compile()

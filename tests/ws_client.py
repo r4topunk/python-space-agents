@@ -3,12 +3,9 @@ import websockets
 import json
 from datetime import datetime
 
-# === Config ===
 SERVER_URL = "ws://localhost:10000"
-# SERVER_URL = "wss://space-builder-server.onrender.com"
 DEFAULT_MESSAGE = "bitcoin community"
 
-# === UI Helpers ===
 def timestamp():
     return datetime.now().strftime("%H:%M:%S")
 
@@ -39,9 +36,7 @@ def render_terminal_grid(layout, grid_width=12, grid_height=10):
                 grid_y = y + dy
                 grid_x = x + dx
                 grid[grid_y][grid_x] = f"{label:>3}" if dy == 0 and dx == 0 else " ░ "
-        # legend.append(f"{label} = {i}")
         legend.append(f"{label} = {i} → pos({x},{y}) size({w}x{h})")
-
 
     print("\n🧱 Grid Layout Preview:\n")
     for row in grid:
@@ -51,28 +46,25 @@ def render_terminal_grid(layout, grid_width=12, grid_height=10):
         print("  ", l)
     print()
 
-# === WebSocket Handlers ===
 async def handle_messages(ws):
-    builder_buffer = ""
-    collecting_builder = False
-
     try:
         async for reply in ws:
-            data = json.loads(reply)
+            # print("\nRaw reply:", reply)
+
+            try:
+                data = json.loads(reply)
+            except json.JSONDecodeError:
+                print(f"{timestamp()} ❌ JSON parse error: {reply}")
+                continue
+
             if not isinstance(data, dict):
                 print(f"{timestamp()} 🟠 Unrecognized data: {data}")
                 continue
 
             msg_type = data.get("type", "").lower()
 
-            # --- Logs ---
             if msg_type == "log":
                 print(f"{timestamp()} 🛰️ [{data.get('node', '?').upper()}] {data.get('status', '').upper()}: {data.get('content', '')}")
-
-            elif "log" in msg_type and msg_type != "builder_logs":
-                print(f"{timestamp()} 🛰️ [{data.get('name', '?').upper()}] {data.get('status', '').upper()}: {data.get('message', '')}")
-
-            # --- Reply ---
             elif msg_type == "reply":
                 print(f"{timestamp()} 🟡 Reply:")
                 for m in data.get("message", []):
@@ -80,41 +72,44 @@ async def handle_messages(ws):
                         print(f"💬 {m.get('type', 'Text')}: {m.get('content', '')}")
                     elif isinstance(m, str):
                         print(f"💬 {m}")
-
-            # --- Message ---
             elif msg_type == "message":
                 print(f"{timestamp()} 💬 {data.get('content', '')}")
-
-            # --- Session ---
             elif msg_type == "session":
                 s = data.get("session", {})
                 print(f"{timestamp()} 🆔 Session: ID={s.get('client_id', 'unknown')} Status={s.get('status', 'unknown')}")
-
-            # --- Error ---
             elif "error" in data:
                 print(f"{timestamp()} ❌ Error: {data.get('error')}")
-
-            # --- Builder Logs (streamed JSON) ---
             elif msg_type == "builder_logs":
-                for chunk in data.get("message", []):
-                    if isinstance(chunk, str):
-                        builder_buffer += chunk
-                        collecting_builder = True
+                message = data.get("message", {})
+                if not message:
+                    print(f"{timestamp()} ❌ Empty builder_logs message")
+                    continue
 
-                try:
-                    parsed = json.loads(builder_buffer)
-                    print(f"\n{timestamp()} 🧩 Builder Output:\n")
-                    print(json.dumps(parsed, indent=2))
+                # print(f"\n{timestamp()} 🧩 Builder Output:\n")
+                # print(json.dumps(message, indent=2))
 
-                    layout = parsed.get("layoutDetails", {}).get("layoutConfig", {}).get("layout", [])
-                    if layout:
-                        render_terminal_grid(layout)
-
-                    builder_buffer = ""
-                    collecting_builder = False
-
-                except json.JSONDecodeError:
-                    continue  # Keep buffering
+                layout = message.get("layoutDetails", {}).get("layoutConfig", {}).get("layout", [])
+                fidgets = message.get("fidgetInstanceDatums", {})
+                if layout:
+                    render_terminal_grid(layout)
+                    print(f"\n📦 Fidget Details:")
+                    for fid, fidget in fidgets.items():
+                        print(f"  - ID: {fid}")
+                        print(f"    Type: {fidget.get('fidgetType')}")
+                        print(f"    Settings: {fidget.get('config', {}).get('settings', {})}")
+                        data = fidget.get('config', {}).get('data', {})
+                        if data:
+                            print(f"    Data:")
+                            if "images" in data:
+                                print(f"      Images ({len(data['images'])}):")
+                                for img in data["images"]:
+                                    print(f"        - {img.get('url')} (Score: {img.get('score')}, Resolution: {img.get('resolution')})")
+                            else:
+                                print(f"      {data}")
+                        else:
+                            print(f"    Data: None")
+                else:
+                    print(f"{timestamp()} ❌ No layout found in builder_logs")
             else:
                 print(f"{timestamp()} 🟠 Unknown message type: {data}")
 
@@ -146,7 +141,6 @@ async def send_commands(ws):
         else:
             print("❌ Unknown key. Type [H] for help.")
 
-# === Main ===
 async def connect_with_retry(uri):
     while True:
         try:

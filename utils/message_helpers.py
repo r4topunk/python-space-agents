@@ -1,5 +1,5 @@
 def make_log(node: str, status: str, content: str) -> dict:
-    print(f"📝 [SERVER LOG] [{node.upper()}] {status.upper()}: {content}")
+    # print(f"📝 [SERVER LOG] [{node.upper()}] {status.upper()}: {content}")
     return {
         "type": "LOG",
         "node": node,
@@ -24,3 +24,4 @@ def make_error(error_msg: str) -> dict:
         "type": "error",
         "error": error_msg
     }
+

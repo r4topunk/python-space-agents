@@ -43,6 +43,7 @@ async def designer_logic(state: Dict[str, Any]) -> AsyncGenerator[Dict[str, Any]
     yield make_log("designer", "start", f"🎨 Designing layout for {len(fidgets)} fidgets")
 
     layout = generate_layout(fidgets)
+    
     yield make_log("designer", "end", f"📐 Assigned {len(layout)} layout blocks in grid {GRID_WIDTH}x{GRID_HEIGHT}")
 
     yield {

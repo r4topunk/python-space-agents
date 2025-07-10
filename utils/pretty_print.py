@@ -155,30 +155,32 @@ def pretty_print_message(message):
 
     print(f"\n{header}\n{content}\n")
 
+from typing import Union
 
-def print_grid_layout(layout: dict):
-    """
-    Renders a grid preview and legend based on layoutConfig.
-    """
-    layout_config = layout.get("layout", [])
-    grid = [["░"] * 12 for _ in range(10)]
+def print_grid_layout(layout, grid_width=12, grid_height=10):
+    grid = [[" . " for _ in range(grid_width)] for _ in range(grid_height)]
     legend = []
 
-    for idx, f in enumerate(layout_config):
-        x, y, w, h = f["x"], f["y"], f["w"], f["h"]
-        label = f"F{idx + 1}"
+    for idx, item in enumerate(layout, 1):
+        i = item.get("i", "?")
+        x, y, w, h = item.get("x", 0), item.get("y", 0), item.get("w", 1), item.get("h", 1)
+
+        if x + w > grid_width or y + h > grid_height:
+            print(f"❌ Invalid position/size for: {i}")
+            continue
+
+        label = f"F{idx}"
         for dy in range(h):
             for dx in range(w):
-                gx = x + dx
-                gy = y + dy
-                if 0 <= gx < 12 and 0 <= gy < 10:
-                    grid[gy][gx] = label if dx == 0 and dy == 0 else "."
-
-        legend.append(f"   {label} = {f['i']} @ ({x},{y}) [{w}x{h}]")
+                grid_y = y + dy
+                grid_x = x + dx
+                grid[grid_y][grid_x] = f"{label:>3}" if dy == 0 and dx == 0 else " ░ "
+        legend.append(f"{label} = {i} @ ({x},{y}) [{w}x{h}]")
 
     print("\n🧱 Grid Layout Preview:\n")
     for row in grid:
-        print(" ", " ".join(row))
+        print("".join(row))
     print("\n📘 Legend:")
-    for line in legend:
-        print(line)
+    for l in legend:
+        print("  ", l)
+    print()
